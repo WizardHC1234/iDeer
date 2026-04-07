@@ -30,6 +30,7 @@ CONFIG_FILE = PROJECT_ROOT / ".web_config.json"
 ENV_FILE = PROJECT_ROOT / ".env"
 PUBLIC_UI_FILE = PROJECT_ROOT / "public-web-ui.html"
 ADMIN_UI_FILE = PROJECT_ROOT / "web-ui.html"
+DESKTOP_UI_FILE = PROJECT_ROOT / "desktop-ui.html"
 DESCRIPTION_FILE = PROJECT_ROOT / "profiles" / "description.txt"
 RESEARCHER_PROFILE_FILE = PROJECT_ROOT / "profiles" / "researcher_profile.md"
 TWITTER_ACCOUNTS_FILE = PROJECT_ROOT / "profiles" / "x_accounts.txt"
@@ -775,6 +776,11 @@ def public_web_ui():
 @app.get("/admin")
 def admin_web_ui():
     return FileResponse(ADMIN_UI_FILE)
+
+
+@app.get("/desktop")
+def desktop_web_ui():
+    return FileResponse(DESKTOP_UI_FILE)
 
 
 @app.get("/web-ui.html")

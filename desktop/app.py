@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     log_level = "info" if args.debug else "warning"
-    route = "/admin" if args.admin else "/"
+    route = "/admin" if args.admin else "/desktop"
 
     server = start_local_server(port=args.port, log_level=log_level)
     url = f"{server.base_url}{route}"

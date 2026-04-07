@@ -41,6 +41,18 @@
                   linear-gradient(180deg, #f6f8fc 0%, #f9fbff 40%, #ffffff 100%);
       min-height: 100vh;
     }
+    body.desktop-embed {
+      background:
+        radial-gradient(circle at 18% 10%, rgba(210,224,244,0.4), transparent 24%),
+        linear-gradient(180deg, #f8fbff 0%, #f3f7fb 100%);
+    }
+    body.desktop-embed header {
+      display: none;
+    }
+    body.desktop-embed main {
+      max-width: none !important;
+      padding: 24px 24px 32px !important;
+    }
     .glass-card {
       background: rgba(255, 255, 255, 0.95);
       backdrop-filter: blur(20px);
@@ -372,7 +384,7 @@
       </div>
 
       <!-- LLM Config -->
-      <div class="glass-card rounded-2xl p-6 border border-slate-200/80 shadow-soft">
+      <div id="config-section-model" class="glass-card rounded-2xl p-6 border border-slate-200/80 shadow-soft">
         <h3 class="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
@@ -412,7 +424,7 @@
       </div>
 
       <!-- Email Config -->
-      <div class="glass-card rounded-2xl p-6 border border-slate-200/80 shadow-soft">
+      <div id="config-section-output" class="glass-card rounded-2xl p-6 border border-slate-200/80 shadow-soft">
         <h3 class="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
@@ -449,7 +461,7 @@
       </div>
 
       <!-- Source Config -->
-      <div class="glass-card rounded-2xl p-6 border border-slate-200/80 shadow-soft">
+      <div id="config-section-sources" class="glass-card rounded-2xl p-6 border border-slate-200/80 shadow-soft">
         <h3 class="text-lg font-semibold text-slate-800 mb-4">信息源配置</h3>
 
         <!-- GitHub Config -->
@@ -558,7 +570,7 @@ sama
       </div>
 
       <!-- Interest Profile -->
-      <div class="glass-card rounded-2xl p-6 border border-slate-200/80 shadow-soft">
+      <div id="config-section-interest" class="glass-card rounded-2xl p-6 border border-slate-200/80 shadow-soft">
         <h3 class="text-lg font-semibold text-slate-800 mb-4">兴趣描述</h3>
         <textarea id="config-description" rows="6"
                   placeholder="描述你感兴趣的领域，例如：
@@ -573,7 +585,7 @@ I'm not interested in:
       </div>
 
       <!-- Researcher Profile -->
-      <div class="glass-card rounded-2xl p-6 border border-slate-200/80 shadow-soft">
+      <div id="config-section-profile" class="glass-card rounded-2xl p-6 border border-slate-200/80 shadow-soft">
         <h3 class="text-lg font-semibold text-slate-800 mb-4">研究者画像（可选）</h3>
         <textarea id="config-researcher-profile" rows="6"
                   placeholder="用于生成研究想法的详细画像，包括你的研究背景、正在进行的项目、感兴趣的研究方向等..."
@@ -639,6 +651,7 @@ I'm not interested in:
   </div>
 
   <script>
+    const DESKTOP_EMBED = new URLSearchParams(window.location.search).get('desktop_embed') === '1';
     // State Management
     const state = {
       selectedSources: new Set(),
@@ -648,14 +661,41 @@ I'm not interested in:
       isRunning: false
     };
 
-    const BASE_PATH = '/daily-recommender';
+    const BASE_PATH = (() => {
+      const path = window.location.pathname;
+      const prefixes = ['/daily-recommender', '/dr'];
+      return prefixes.find(prefix => path === prefix || path.startsWith(`${prefix}/`)) || '';
+    })();
     const API_BASE = window.location.origin + BASE_PATH;
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
+      if (DESKTOP_EMBED) {
+        document.body.classList.add('desktop-embed');
+      }
+      applyDesktopRouteParams();
       loadConfig();
       loadHistory();
     });
+
+    function applyDesktopRouteParams() {
+      const params = new URLSearchParams(window.location.search);
+      const targetView = params.get('desktop_view');
+      const targetSection = params.get('desktop_section');
+
+      if (targetView && ['dashboard', 'config', 'history'].includes(targetView)) {
+        switchTab(targetView);
+      }
+
+      if (targetSection) {
+        window.requestAnimationFrame(() => {
+          const section = document.getElementById(`config-section-${targetSection}`);
+          if (section) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      }
+    }
 
     // Tab Switching
     function switchTab(tab) {

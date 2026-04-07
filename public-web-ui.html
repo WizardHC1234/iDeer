@@ -53,6 +53,18 @@
         radial-gradient(circle at 85% 15%, rgba(251, 191, 36, 0.16), transparent 22%),
         linear-gradient(180deg, #f7fbff 0%, #f6f7fb 42%, #ffffff 100%);
     }
+    body.desktop-embed {
+      background:
+        radial-gradient(circle at 20% 10%, rgba(15, 118, 110, 0.08), transparent 24%),
+        linear-gradient(180deg, #f8fbff 0%, #f4f7fb 100%);
+    }
+    body.desktop-embed header {
+      display: none;
+    }
+    body.desktop-embed main {
+      max-width: none;
+      padding: 28px 24px 36px;
+    }
     .glass-panel {
       background: rgba(255, 255, 255, 0.82);
       backdrop-filter: blur(20px);
@@ -166,7 +178,7 @@
           GitHub 仓库
         </a>
 
-        <a href="/daily-recommender/admin" class="hidden rounded-2xl px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-slate-800 md:inline-flex">
+        <a data-admin-link href="/admin" class="hidden rounded-2xl px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-slate-800 md:inline-flex">
           后台
         </a>
       </div>
@@ -188,7 +200,7 @@
       </div>
 
       <div id="mail-warning" class="hidden rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-7 text-amber-800 shadow-soft">
-        服务器还没有配置发件邮箱。请先打开 <a href="/daily-recommender/admin" class="font-semibold underline">Admin</a> 完成 SMTP 配置，否则无法实际发送邮件。
+        服务器还没有配置发件邮箱。请先打开 <a data-admin-link href="/admin" class="font-semibold underline">Admin</a> 完成 SMTP 配置，否则无法实际发送邮件。
       </div>
 
       <section class="glass-panel rounded-[2rem] border border-white/70 p-6 shadow-panel md:p-7">
@@ -390,6 +402,7 @@
   </div>
 
   <script>
+    const DESKTOP_EMBED = new URLSearchParams(window.location.search).get('desktop_embed') === '1';
     const state = {
       mode: 'quick',
       deliveryMode: 'combined_report',
@@ -403,10 +416,17 @@
       }
     };
 
-    const BASE_PATH = '/daily-recommender';
+    const BASE_PATH = (() => {
+      const path = window.location.pathname;
+      const prefixes = ['/daily-recommender', '/dr'];
+      return prefixes.find(prefix => path === prefix || path.startsWith(`${prefix}/`)) || '';
+    })();
     const API_BASE = window.location.origin + BASE_PATH;
 
     document.addEventListener('DOMContentLoaded', () => {
+      if (DESKTOP_EMBED) {
+        document.body.classList.add('desktop-embed');
+      }
       loadMeta();
       renderMode();
       renderDeliveryMode();
@@ -427,6 +447,9 @@
     function applyMeta() {
       document.querySelectorAll('[data-github-link]').forEach(link => {
         link.href = state.meta.github_url || 'https://github.com/LiYu0524/daily-recommender';
+      });
+      document.querySelectorAll('[data-admin-link]').forEach(link => {
+        link.href = `${BASE_PATH}/admin`;
       });
 
       document.getElementById('mail-warning').classList.toggle('hidden', !!state.meta.mail_enabled);
