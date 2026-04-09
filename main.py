@@ -237,12 +237,13 @@ def main():
         print(f"LLM test failed: {e}")
         raise RuntimeError("LLM not available, aborting.")
 
-    # Run each source
+    # Run each source (parallel when multiple sources)
     all_recs = {}
-    for source_name in args.sources:
-        print(f"\n{'='*60}")
-        print(f"Running source: {source_name}")
-        print(f"{'='*60}")
+
+    def _run_source(source_name: str) -> tuple[str, list[dict]]:
+        print(f"\n[{source_name}] {'='*50}")
+        print(f"[{source_name}] Starting source")
+        print(f"[{source_name}] {'='*50}")
 
         source_cls = SOURCE_REGISTRY[source_name]
         source_args = source_cls.extract_args(args)
@@ -253,7 +254,28 @@ def main():
             source.render_email(recs)
         else:
             recs = source.send_email(email_config)
-        all_recs[source_name] = recs or []
+
+        print(f"[{source_name}] Completed with {len(recs or [])} recommendations")
+        return source_name, recs or []
+
+    if len(args.sources) >= 2:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        print(f"\nRunning {len(args.sources)} sources in parallel: {args.sources}")
+        with ThreadPoolExecutor(max_workers=len(args.sources)) as executor:
+            futures = {executor.submit(_run_source, name): name for name in args.sources}
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    source_name, recs = future.result()
+                    all_recs[source_name] = recs
+                except Exception as e:
+                    print(f"[{name}] Source failed: {e}")
+                    all_recs[name] = []
+    else:
+        for source_name in args.sources:
+            _, recs = _run_source(source_name)
+            all_recs[source_name] = recs
 
     if args.generate_report:
         print(f"\n{'='*60}")
