@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-purple.svg)](https://claude.ai/code)
+[![Codex Skill](https://img.shields.io/badge/Codex-Skill-0A7A5E.svg)](./skills/ideer-daily-paper/SKILL.md)
 [![AgentSkills Standard](https://img.shields.io/badge/AgentSkills-Standard-brightgreen.svg)](https://github.com/anthropics/agent-skills)
 
 [English](./README.md) · [技术文档](./docs/TECHNICAL.md) · [桌面 Demo](./docs/DESKTOP_DEMO.md)
@@ -102,7 +103,7 @@ vim .env
 vim profiles/description.txt
 
 # 4. 跑一次试试（不发邮件）
-python main.py --sources github huggingface arxiv semanticscholar --save --skip_source_emails
+python main.py --sources arxiv semanticscholar huggingface --save --skip_source_emails
 ```
 
 搞定。去 `history/` 看产出。
@@ -115,23 +116,28 @@ python main.py --sources github huggingface arxiv semanticscholar --save --skip_
 # .env 里补上：
 SMTP_SERVER=xxx       # 邮件相关
 SMTP_PORT=465
-SENDER=xxx
-RECEIVER=xxx
-SENDER_PASSWORD=xxx
-X_RAPIDAPI_KEY=xxx    # Twitter（可选）
-GENERATE_REPORT=1     # 开启跨源报告
-GENERATE_IDEAS=1      # 开启研究灵感
+SMTP_SENDER=xxx
+SMTP_RECEIVER=xxx
+SMTP_PASSWORD=xxx
+DAILY_SOURCES="arxiv semanticscholar huggingface"
+HF_CONTENT_TYPES="papers"
+GENERATE_REPORT=1
+SEND_REPORT_EMAIL=1
+GENERATE_IDEAS=1
+RESEARCHER_PROFILE=profiles/researcher_profile.md
 
 # 一键流水线
 bash scripts/run_daily.sh
 ```
+
+默认模式已经是论文阅读优先：`arxiv + semanticscholar + huggingface`，并且会同时生成论文摘要、跨源 report 和 research ideas。
 
 **两种定时方式：**
 
 | 方式 | 适合 | 配置 |
 |------|------|------|
 | **Web UI 内置调度器** | 跑着 web server 的用户 | Admin 页面 → 定时推送，选频率和时间 |
-| **系统 cron** | 服务器部署 | `0 8 * * 1-5 /path/to/scripts/run_daily.sh` |
+| **系统 cron** | 服务器部署 | `0 13 * * * /path/to/scripts/run_daily.sh` |
 
 支持四种推送频率：**每日 / 仅工作日 / 每周 / 每月**。
 
@@ -166,6 +172,19 @@ bash scripts/run_daily.sh
 - **🎓 多 Scholar 画像** — 同时关联多个 Google Scholar 账户，合并发表记录
 - **🖥️ 桌面客户端** — 本地 GUI 体验（见 [Desktop Demo](./docs/DESKTOP_DEMO.md)）
 - **🔌 Claude Code Skill** — 支持作为 Claude Code 技能集成
+- **🤖 Codex Daily Paper Skill** — 内置 [`skills/ideer-daily-paper/SKILL.md`](./skills/ideer-daily-paper/SKILL.md)，让 Codex 按统一流程完成每日论文阅读、自动整理、邮件发送和自动化调度
+
+## 用 Codex 做每日论文自动化
+
+如果你希望把 iDeer 变成 Codex 的每日自动化任务，推荐把仓库里的 [`skills/ideer-daily-paper/SKILL.md`](./skills/ideer-daily-paper/SKILL.md) 作为操作规范。
+
+典型流程是：
+
+1. 先按 skill 的要求补齐 `.env`、`profiles/description.txt` 和可选的 `profiles/researcher_profile.md`
+2. 先做一次 dry run，确认 `history/` 里已经产出日报、report 或 ideas
+3. 再让 Codex automation 每天北京时间 13:00 定时调用 `bash scripts/run_daily.sh`
+
+这个 skill 不是重新实现推荐逻辑，而是明确告诉 Codex 什么时候跑 `main.py`，什么时候跑 `scripts/run_daily.sh`，如何验证产物，以及什么时候可以安全发邮件
 
 ## FAQ
 
