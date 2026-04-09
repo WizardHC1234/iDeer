@@ -16,6 +16,7 @@ env/
 .vscode/
 *.swp
 *.swo
+node_modules/
 
 # History/cache data
 history/
@@ -27,3 +28,6 @@ state/
 # Environment variables
 .env
 .web_config.json
+.client_config.json
+client/.client_config.json
+.client_logs/
