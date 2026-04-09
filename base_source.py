@@ -30,12 +30,30 @@ class BaseSource(ABC):
         self.run_datetime = datetime.now(timezone.utc)
         self.run_date = self.run_datetime.strftime("%Y-%m-%d")
         self.description = common_config.description
+        self.profile_hash = common_config.profile_hash
         self.lock = threading.Lock()
 
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # --- Cache layer 1: shared fetch cache (interest-independent) ---
+        self.fetch_cache_dir = os.path.join(
+            base_dir, common_config.state_dir, "fetch_cache", self.name, self.run_date
+        )
+        os.makedirs(self.fetch_cache_dir, exist_ok=True)
+
+        # --- Cache layer 2: eval cache (isolated by profile_hash) ---
+        self.eval_cache_dir = None
+        if self.profile_hash:
+            self.eval_cache_dir = os.path.join(
+                base_dir, common_config.state_dir, "eval_cache",
+                self.name, self.run_date, self.profile_hash,
+            )
+            os.makedirs(self.eval_cache_dir, exist_ok=True)
+
+        # --- History: final output mirror (unchanged structure for UI) ---
         self.save_dir = None
-        self.cache_dir = None
+        self.cache_dir = None  # legacy alias kept for compatibility
         if common_config.save:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
             self.save_dir = os.path.join(base_dir, common_config.save_dir, self.name, self.run_date)
             self.cache_dir = os.path.join(self.save_dir, "json")
             os.makedirs(self.cache_dir, exist_ok=True)
@@ -99,19 +117,40 @@ class BaseSource(ABC):
         """Return the max number of items to recommend. Override in subclass."""
         return 30
 
+    def _load_fetch_cache(self, key: str) -> list[dict] | None:
+        """Load shared fetch cache (interest-independent)."""
+        from cache_utils import safe_read_json
+        path = os.path.join(self.fetch_cache_dir, f"{key}.json")
+        data = safe_read_json(path)
+        if data is not None and isinstance(data, list):
+            print(f"[{self.name}] Fetch cache hit: {key} ({len(data)} items)")
+        return data if isinstance(data, list) else None
+
+    def _save_fetch_cache(self, key: str, items: list[dict]):
+        """Save shared fetch cache (interest-independent)."""
+        from cache_utils import atomic_write_json
+        path = os.path.join(self.fetch_cache_dir, f"{key}.json")
+        try:
+            atomic_write_json(path, items)
+        except OSError as e:
+            print(f"[{self.name}] Fetch cache write failed: {e}")
+
     def process_item(self, item: dict, max_retries: int = 5) -> dict | None:
+        from cache_utils import atomic_write_json, safe_read_json
+
         retry_count = 0
         cache_id = self.get_item_cache_id(item)
-        cache_path = os.path.join(self.cache_dir, f"{cache_id}.json") if self.cache_dir else None
 
-        if cache_path and os.path.exists(cache_path):
-            try:
-                with open(cache_path, "r", encoding="utf-8") as f:
-                    cached = json.load(f)
-                print(f"Cache loaded: {cache_path}")
+        # Primary: profile-isolated eval cache (state/eval_cache/<source>/<date>/<profile_hash>/)
+        eval_path = os.path.join(self.eval_cache_dir, f"{cache_id}.json") if self.eval_cache_dir else None
+
+        if eval_path:
+            cached = safe_read_json(eval_path)
+            if cached is not None:
+                print(f"[{self.name}] Eval cache hit: {cache_id}")
+                # Mirror to history for UI
+                self._mirror_to_history(cache_id, cached)
                 return cached
-            except (json.JSONDecodeError, OSError) as e:
-                print(f"Cache load failed ({cache_path}): {e}, refetching.")
 
         while retry_count < max_retries:
             try:
@@ -119,13 +158,15 @@ class BaseSource(ABC):
                 response = self.model.inference(prompt, temperature=self.temperature)
                 result = self.parse_eval_response(item, response)
 
-                if cache_path:
+                # Write to eval cache (profile-isolated, atomic)
+                if eval_path:
                     try:
-                        with self.lock:
-                            with open(cache_path, "w", encoding="utf-8") as f:
-                                json.dump(result, f, ensure_ascii=False, indent=2)
+                        atomic_write_json(eval_path, result)
                     except OSError as e:
-                        print(f"Cache write failed ({cache_path}): {e}")
+                        print(f"[{self.name}] Eval cache write failed ({eval_path}): {e}")
+
+                # Mirror to history for UI
+                self._mirror_to_history(cache_id, result)
                 return result
 
             except Exception as e:
@@ -137,6 +178,18 @@ class BaseSource(ABC):
                     return None
                 time.sleep(1)
         return None
+
+    def _mirror_to_history(self, cache_id: str, result: dict):
+        """Write eval result to history/json/ for UI compatibility."""
+        if not self.cache_dir:
+            return
+        history_path = os.path.join(self.cache_dir, f"{cache_id}.json")
+        try:
+            with self.lock:
+                with open(history_path, "w", encoding="utf-8") as f:
+                    json.dump(result, f, ensure_ascii=False, indent=2)
+        except OSError:
+            pass
 
     def get_recommendations(self) -> list[dict]:
         raw_items = self.fetch_items()
@@ -274,12 +327,6 @@ class BaseSource(ABC):
         return "36,41,46"
 
     def render_email(self, recommendations: list[dict]) -> str:
-        email_cache = os.path.join(self.save_dir, f"{self.name}_email.html") if self.save_dir else None
-        if email_cache and os.path.exists(email_cache):
-            with open(email_cache, "r", encoding="utf-8") as f:
-                print(f"[{self.name}] Email loaded from cache: {email_cache}")
-                return f.read()
-
         if not recommendations:
             return framework.replace("__CONTENT__", get_empty_html())
 
@@ -292,9 +339,11 @@ class BaseSource(ABC):
         content = summary + "<br>" + "</br><br>".join(parts) + "</br>"
         email_html = framework.replace("__CONTENT__", content)
 
-        if email_cache:
-            os.makedirs(os.path.dirname(email_cache), exist_ok=True)
-            with open(email_cache, "w", encoding="utf-8") as f:
+        # Save to history as a snapshot (not used as cache)
+        if self.save_dir:
+            email_path = os.path.join(self.save_dir, f"{self.name}_email.html")
+            os.makedirs(os.path.dirname(email_path), exist_ok=True)
+            with open(email_path, "w", encoding="utf-8") as f:
                 f.write(email_html)
 
         return email_html

@@ -25,3 +25,5 @@ class CommonConfig:
     num_workers: int = 4
     save: bool = False
     save_dir: str = "./history"
+    profile_hash: str = ""
+    state_dir: str = "./state"

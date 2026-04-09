@@ -32,13 +32,26 @@ class SemanticScholarSource(BaseSource):
         if not self.queries:
             self.queries = self._derive_queries_from_description()
 
-        self.raw_papers = fetch_papers_for_queries(
-            self.queries,
-            max_results_per_query=self.max_results,
-            year=self.year_filter or None,
-            fields_of_study=self.fields_of_study or None,
-            api_key=self.api_key,
-        )
+        import hashlib
+        query_sig = hashlib.sha256(
+            "|".join(sorted(self.queries)).encode()
+        ).hexdigest()[:10]
+        cache_key = f"papers_{query_sig}_{self.max_results}"
+        if self.year_filter:
+            cache_key += f"_{self.year_filter}"
+        cached = self._load_fetch_cache(cache_key)
+        if cached is not None:
+            self.raw_papers = cached
+        else:
+            self.raw_papers = fetch_papers_for_queries(
+                self.queries,
+                max_results_per_query=self.max_results,
+                year=self.year_filter or None,
+                fields_of_study=self.fields_of_study or None,
+                api_key=self.api_key,
+            )
+            if self.raw_papers:
+                self._save_fetch_cache(cache_key, self.raw_papers)
 
     def _derive_queries_from_description(self) -> list[str]:
         """Extract up to 3 search queries from the user description."""

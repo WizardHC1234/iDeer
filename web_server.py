@@ -599,6 +599,11 @@ async def run_daily_recommender(req: RunRequest):
         if description_path:
             _append_arg(cmd, "--description", description_path)
 
+        # Pass profile hash for eval cache isolation
+        if effective_description:
+            from cache_utils import stable_profile_hash
+            _append_arg(cmd, "--profile_hash", stable_profile_hash(effective_description))
+
         if should_generate_report:
             cmd.append("--generate_report")
             result_dirs.append(HISTORY_DIR / "reports" / today)

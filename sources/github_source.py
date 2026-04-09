@@ -23,14 +23,21 @@ class GitHubSource(BaseSource):
 
         self.repos = {}
         for lang in self.languages:
-            repos = get_trending_repos(
-                language=None if lang == "all" else lang,
-                since=self.since,
-                max_results=self.max_repos * 2,
-            )
+            cache_key = f"trending_{lang}_{self.since}"
+            cached = self._load_fetch_cache(cache_key)
+            if cached is not None:
+                repos = cached
+            else:
+                repos = get_trending_repos(
+                    language=None if lang == "all" else lang,
+                    since=self.since,
+                    max_results=self.max_repos * 2,
+                )
+                if repos:
+                    self._save_fetch_cache(cache_key, repos)
+                time.sleep(1)
             self.repos[lang] = repos
-            print(f"[{self.name}] {len(repos)} trending repos fetched for '{lang}'")
-            time.sleep(1)
+            print(f"[{self.name}] {len(repos)} trending repos for '{lang}'")
 
     @staticmethod
     def add_arguments(parser: argparse.ArgumentParser):

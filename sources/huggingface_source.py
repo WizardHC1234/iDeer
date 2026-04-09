@@ -25,11 +25,23 @@ class HuggingFaceSource(BaseSource):
         self.papers = []
         self.models = []
         if "papers" in self.content_types:
-            self.papers = get_daily_papers(self.max_papers * 2)
-            print(f"[{self.name}] {len(self.papers)} daily papers fetched")
+            cached = self._load_fetch_cache("daily_papers")
+            if cached is not None:
+                self.papers = cached
+            else:
+                self.papers = get_daily_papers(self.max_papers * 2)
+                if self.papers:
+                    self._save_fetch_cache("daily_papers", self.papers)
+            print(f"[{self.name}] {len(self.papers)} daily papers")
         if "models" in self.content_types:
-            self.models = get_trending_models_api(self.max_models * 2)
-            print(f"[{self.name}] {len(self.models)} trending models fetched")
+            cached = self._load_fetch_cache("trending_models")
+            if cached is not None:
+                self.models = cached
+            else:
+                self.models = get_trending_models_api(self.max_models * 2)
+                if self.models:
+                    self._save_fetch_cache("trending_models", self.models)
+            print(f"[{self.name}] {len(self.models)} trending models")
 
     @staticmethod
     def add_arguments(parser: argparse.ArgumentParser):
@@ -227,12 +239,6 @@ class HuggingFaceSource(BaseSource):
 
     def render_email(self, recommendations: list[dict]) -> str:
         """Override: render papers and models in separate sections."""
-        email_cache = os.path.join(self.save_dir, f"{self.name}_email.html") if self.save_dir else None
-        if email_cache and os.path.exists(email_cache):
-            with open(email_cache, "r", encoding="utf-8") as f:
-                print(f"[{self.name}] Email loaded from cache: {email_cache}")
-                return f.read()
-
         papers = [r for r in recommendations if r.get("_hf_type") == "paper"]
         models = [r for r in recommendations if r.get("_hf_type") == "model"]
 
@@ -255,9 +261,11 @@ class HuggingFaceSource(BaseSource):
         content = summary + "<br>" + "</br><br>".join(parts) + "</br>"
         email_html = framework.replace("__CONTENT__", content)
 
-        if email_cache:
-            os.makedirs(os.path.dirname(email_cache), exist_ok=True)
-            with open(email_cache, "w", encoding="utf-8") as f:
+        # Save to history as snapshot (not used as cache)
+        if self.save_dir:
+            email_path = os.path.join(self.save_dir, f"{self.name}_email.html")
+            os.makedirs(os.path.dirname(email_path), exist_ok=True)
+            with open(email_path, "w", encoding="utf-8") as f:
                 f.write(email_html)
 
         return email_html

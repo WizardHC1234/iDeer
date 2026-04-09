@@ -18,10 +18,17 @@ class ArxivSource(BaseSource):
         self.max_entries = source_args.get("max_entries", 100)
         self.max_papers = source_args.get("max_papers", 60)
 
-        self.papers_by_category = fetch_papers_for_categories(
-            self.categories,
-            max_entries=self.max_entries,
-        )
+        cache_key = f"papers_{'_'.join(sorted(self.categories))}_{self.max_entries}"
+        cached = self._load_fetch_cache(cache_key)
+        if cached is not None:
+            self.papers_by_category = cached
+        else:
+            self.papers_by_category = fetch_papers_for_categories(
+                self.categories,
+                max_entries=self.max_entries,
+            )
+            if self.papers_by_category:
+                self._save_fetch_cache(cache_key, self.papers_by_category)
 
     @staticmethod
     def add_arguments(parser: argparse.ArgumentParser):

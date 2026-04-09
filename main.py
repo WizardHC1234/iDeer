@@ -113,6 +113,8 @@ def main():
     )
     parser.add_argument("--save", action="store_true", help="Save results to history")
     parser.add_argument("--save_dir", type=str, default="./history", help="History save directory")
+    parser.add_argument("--profile_hash", type=str, default="", help="Pre-computed profile hash for cache isolation")
+    parser.add_argument("--state_dir", type=str, default="./state", help="State directory for caches")
     parser.add_argument(
         "--skip_source_emails",
         action="store_true",
@@ -201,6 +203,10 @@ def main():
     with open(args.description, "r", encoding="utf-8") as f:
         description_text = f.read()
 
+    # Compute profile hash for cache isolation
+    from cache_utils import stable_profile_hash
+    profile_hash = getattr(args, "profile_hash", "") or stable_profile_hash(description_text)
+
     # Build configs
     llm_config = LLMConfig(
         provider=args.provider,
@@ -221,6 +227,8 @@ def main():
         num_workers=args.num_workers,
         save=args.save,
         save_dir=args.save_dir,
+        profile_hash=profile_hash,
+        state_dir=args.state_dir,
     )
 
     print("Testing LLM availability...")
