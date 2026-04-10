@@ -1,8 +1,8 @@
 ---
 name: ideer-daily-paper
 description: "Daily paper/repo digest where YOU are the reader. Fetch items from arXiv/HuggingFace/GitHub/Semantic Scholar, then read, score, summarize, and generate ideas yourself — no external LLM API calls. Use when user says '今日论文', 'daily paper', 'daily digest', '每日推荐', or wants a personalized research briefing."
-argument-hint: "[sources: arxiv huggingface github semanticscholar] [--email] [--ideas]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Agent
+argument-hint: "[auto|custom] [--email] [--ideas]"
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Agent, AskUserQuestion
 ---
 
 # iDeer Daily Paper Skill — Agent-as-Reader
@@ -13,13 +13,108 @@ You ARE the LLM. You read papers, score them, write summaries, generate ideas. N
 
 - **PROJECT_DIR** = `~/Documents/daily-recommender`
 - **BRIDGE** = `python agent_bridge.py` (run from PROJECT_DIR)
-- **DEFAULT_SOURCES** = `arxiv huggingface`
-- **MAX_ITEMS_PER_SOURCE** = 30
-- **TOP_N_TO_REPORT** = 10 per source
 
-## Workflow
+## Phase 0: Interactive Setup
 
-### Phase 1: Load researcher profile
+If no arguments are provided, or if user hasn't specified a mode, present this menu:
+
+---
+
+### 🦌 iDeer 每日研究简报
+
+**选择运行模式：**
+
+**A. 全自动** — 使用默认配置一键运行
+  - 信息源：arXiv (cs.AI, cs.CL, cs.LG) + HuggingFace 论文
+  - 每个源取 Top 10 高分项
+  - 自动生成摘要 + 研究灵感
+  - 保存到 history/ 并发送邮件
+
+**B. 自定义** — 选择信息源、数量、输出方式
+
+---
+
+If user chooses **A** (or says "auto", "全自动", or just wants quick results):
+- Set sources = `[arxiv, huggingface]`
+- Set categories = `[cs.AI, cs.CL, cs.LG]`
+- Set max_per_source = 30
+- Set top_n = 10
+- Set generate_ideas = true
+- Set send_email = true
+- Skip to Phase 1.
+
+If user chooses **B** (or says "custom", "自定义"):
+- Show the customization sub-menu (see below), wait for answers, then proceed.
+
+### B. Custom Sub-Menu
+
+Present each choice and wait for the user's response:
+
+```
+📡 选择信息源（多选，用逗号或空格分隔编号）:
+  1. arXiv — 每日新论文（需选分类）
+  2. HuggingFace — 热门论文 + 模型
+  3. GitHub — Trending 仓库
+  4. Semantic Scholar — 跨学科论文搜索（需输入关键词）
+  5. 全部
+
+默认: 1, 2
+```
+
+If arXiv selected:
+```
+📂 arXiv 分类（多选）:
+  1. cs.AI — 人工智能
+  2. cs.CL — 计算语言学 / NLP
+  3. cs.CV — 计算机视觉
+  4. cs.LG — 机器学习
+  5. cs.CR — 密码学与安全
+  6. cs.RO — 机器人
+  7. 自定义输入（如 cs.MA, stat.ML）
+
+默认: 1, 2, 4
+```
+
+If Semantic Scholar selected:
+```
+🔍 Semantic Scholar 搜索关键词（逗号分隔）:
+  示例: agent safety, trustworthy AI, LLM alignment
+
+  留空则从 profiles/description.txt 自动提取
+```
+
+Then:
+```
+📊 每个源最多抓取多少项？
+  默认: 30
+
+📋 最终展示 Top N 项？
+  默认: 10
+
+💡 是否生成研究灵感（ideas）？
+  [Y/n] 默认: Y
+
+📧 是否发送邮件？
+  [Y/n] 默认: Y（需要 .env 中配置 SMTP）
+```
+
+After all choices, show a confirmation summary:
+```
+✅ 配置确认：
+  信息源: arXiv (cs.AI, cs.CL), GitHub
+  每源上限: 30 项
+  展示: Top 10
+  生成灵感: 是
+  发送邮件: 否
+
+  开始运行？[Y/n]
+```
+
+Then proceed to Phase 1 with the chosen settings.
+
+---
+
+## Phase 1: Load researcher profile
 
 ```bash
 cat $PROJECT_DIR/profiles/description.txt
@@ -28,9 +123,9 @@ cat $PROJECT_DIR/profiles/researcher_profile.md
 
 Read both files. Internalize the researcher's interests, active projects, and target venues. This is YOUR scoring criteria.
 
-### Phase 2: Fetch raw items
+## Phase 2: Fetch raw items
 
-For each requested source, run the bridge fetcher:
+For each selected source, run the bridge fetcher:
 
 ```bash
 cd $PROJECT_DIR
@@ -40,14 +135,14 @@ python agent_bridge.py fetch github --max 20
 python agent_bridge.py fetch semanticscholar --queries "agent safety" "trustworthy AI" --max 30
 ```
 
-Each command prints JSON to stdout. Save the output to a temp file or read it directly.
+Each command prints JSON to stdout. Save output to a temp file or read directly.
 
 **Fallback**: If a fetcher fails (network error, rate limit), use `WebSearch` or `WebFetch` to manually gather items:
 - arXiv: `WebFetch https://arxiv.org/list/cs.AI/recent`
 - HuggingFace: `WebFetch https://huggingface.co/papers`
 - GitHub: `WebFetch https://github.com/trending`
 
-### Phase 3: Read and score (YOU are the LLM)
+## Phase 3: Read and score (YOU are the LLM)
 
 For each fetched item, YOU read the title and abstract/description, then assign:
 
@@ -69,59 +164,48 @@ For each fetched item, YOU read the title and abstract/description, then assign:
 - 3-4: Marginally related
 - 0-2: Not relevant
 
-**Efficiency**: You don't need to score every item individually. Scan all titles first, identify the clearly relevant ones (score ≥ 6), and only write detailed summaries for those. Skip items scoring below 5.
+**Efficiency**: Scan all titles first, identify clearly relevant ones (score ≥ 6), write detailed summaries only for those. Skip items below 5.
 
-### Phase 4: Generate summary report
+## Phase 4: Generate summary report
 
-After scoring, compose a structured summary in Chinese covering:
+Compose a structured summary in Chinese:
 
-1. **今日总览** — 2-3 sentence overview of today's highlights across all sources
-2. **Per interest area** (Agent / Safety / Trustworthy) — top 2-4 items each, with:
-   - Title + source badge
-   - Score + engagement stats (stars, upvotes, etc.)
-   - Why it matters to the researcher (1-2 sentences)
+1. **今日总览** — 2-3 sentence overview across all sources
+2. **Per interest area** (from profile) — top 2-4 items each:
+   - Title + source badge + score
+   - Engagement stats (stars, upvotes, etc.)
+   - Why it matters (1-2 sentences)
 3. **补充观察** — Cross-source trends, surprising connections
 
 Present this summary directly in the conversation.
 
-### Phase 5: Save to history
-
-Save the scored items:
+## Phase 5: Save to history
 
 ```bash
 cd $PROJECT_DIR
 echo '$SCORED_ITEMS_JSON' | python agent_bridge.py save-items arxiv
 echo '$SCORED_ITEMS_JSON' | python agent_bridge.py save-items huggingface
-# etc. for each source
 ```
 
-### Phase 6: Send email (if requested)
+## Phase 6: Send email (if enabled)
 
-If user requested `--email` or it's a scheduled run:
-
-1. Compose an HTML email body using the summary from Phase 4. Use simple, clean HTML — no need to match the exact template. Include:
-   - Summary section at top
-   - Item cards with title, score, summary, URL link
-   - Footer with date
-
-2. Save and send:
+1. Compose clean HTML with summary + item cards + footer
+2. Send:
 ```bash
 cd $PROJECT_DIR
 echo '$EMAIL_HTML' | python agent_bridge.py send-email --subject "iDeer Daily $(date +%Y/%m/%d)"
 ```
 
-### Phase 7: Generate research ideas (if requested)
+## Phase 7: Generate research ideas (if enabled)
 
-If user requested `--ideas` or the profile has `GENERATE_IDEAS=1`:
-
-1. Look at all items scored ≥ 7
-2. Cross-reference with the researcher's active projects
-3. Generate 3-5 research ideas, each with:
+1. Look at items scored ≥ 7
+2. Cross-reference with active projects
+3. Generate 3-5 ideas:
 
 ```json
 {
   "title": "中文标题",
-  "research_direction": "English one-liner for literature search",
+  "research_direction": "English one-liner",
   "hypothesis": "中文假设",
   "connects_to_project": "project name",
   "interest_area": "Agent/Safety/Trustworthy",
@@ -132,40 +216,32 @@ If user requested `--ideas` or the profile has `GENERATE_IDEAS=1`:
 }
 ```
 
-4. Save:
-```bash
-cd $PROJECT_DIR
-echo '$IDEAS_JSON' | python agent_bridge.py save-ideas
+4. Save: `echo '$IDEAS_JSON' | python agent_bridge.py save-ideas`
+5. Present in conversation.
+
+## Scheduling
+
+**Claude Code:**
+```
+/schedule daily at 08:00 Beijing: /ideer-daily-paper auto --email --ideas
 ```
 
-5. Present ideas in conversation.
-
-## Scheduling (Claude Code / Codex)
-
-For recurring daily runs, the user can set up:
-
-**Claude Code scheduled trigger:**
+**Codex automation:**
 ```
-/schedule daily at 08:00 Beijing: /ideer-daily-paper arxiv huggingface --email --ideas
+Run /ideer-daily-paper in auto mode. Score papers, save results, send email, generate ideas.
 ```
 
-**Codex automation prompt:**
-```
-Run /ideer-daily-paper with sources arxiv and huggingface.
-Score papers against profiles/description.txt.
-Save results and send email digest.
-Generate 3 research ideas if any items score ≥ 7.
-```
+When running as a scheduled/automated task, always use **auto** mode (no interactive menu).
 
 ## Quick reference
 
 | Action | Command |
 |--------|---------|
 | Fetch arXiv | `python agent_bridge.py fetch arxiv --categories cs.AI cs.CL --max 50` |
-| Fetch HF papers | `python agent_bridge.py fetch huggingface --content_type papers --max 30` |
+| Fetch HF | `python agent_bridge.py fetch huggingface --content_type papers --max 30` |
 | Fetch GitHub | `python agent_bridge.py fetch github --max 20` |
-| Fetch SS | `python agent_bridge.py fetch semanticscholar --queries "query" --max 30` |
-| Save scored items | `echo JSON | python agent_bridge.py save-items SOURCE` |
+| Fetch SS | `python agent_bridge.py fetch semanticscholar --queries "q1" "q2" --max 30` |
+| Save items | `echo JSON | python agent_bridge.py save-items SOURCE` |
 | Save ideas | `echo JSON | python agent_bridge.py save-ideas` |
 | Send email | `echo HTML | python agent_bridge.py send-email --subject "title"` |
 
@@ -173,5 +249,5 @@ Generate 3 research ideas if any items score ≥ 7.
 
 - Do NOT run `main.py` — that calls external LLM APIs. You ARE the LLM.
 - Do NOT call `scripts/run_daily.sh` — same reason.
-- Do NOT skip reading the items. You must actually read titles/abstracts to score.
-- Do NOT fabricate scores or summaries without reading the content.
+- Do NOT skip reading the items. You must read titles/abstracts to score.
+- Do NOT fabricate scores without reading the content.

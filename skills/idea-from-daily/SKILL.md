@@ -2,12 +2,10 @@
 name: idea-from-daily
 description: "Bridge daily recommender ideas to research pipelines. Read history/ideas/{date}/ideas.json OR generate ideas yourself from today's scored items, then route to /idea-creator, /idea-discovery, or /research-pipeline. Use when user says '/idea-from-daily', '从今日推荐启动研究', 'pick idea from daily'."
 argument-hint: "[date] [--idea N]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, Skill
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, Skill, AskUserQuestion
 ---
 
 # Idea-from-Daily: Bridge Daily Digest → Auto-Research
-
-Read saved ideas or generate them yourself from daily scored items, then launch a research pipeline.
 
 ## Constants
 
@@ -15,65 +13,94 @@ Read saved ideas or generate them yourself from daily scored items, then launch 
 - **IDEAS_DIR** = `$PROJECT_DIR/history/ideas`
 - **HISTORY_DIR** = `$PROJECT_DIR/history`
 
-## Arguments
+## Phase 0: Interactive Setup
 
-Parse from `$ARGUMENTS`:
-- **date** (optional): e.g. `2026-04-10`. Default: today.
-- **--idea N** (optional): Select idea N directly. If omitted, show list.
+If no arguments provided, show this menu:
 
-## Workflow
+---
 
-### Step 1: Find ideas
+### 🧪 从今日推荐启动研究
 
-Try to load `$IDEAS_DIR/{date}/ideas.json`.
+**选择操作：**
 
-If not found, check if scored items exist in `$HISTORY_DIR/*/date/json/`. If they do, YOU generate 3-5 ideas by reading the scored items and the researcher profile — same as Phase 7 of `/ideer-daily-paper`. Save with:
+**A. 浏览已有 ideas** — 查看已生成的研究灵感并选择
+**B. 重新生成 ideas** — 从今天的评分结果重新生成灵感
+**C. 指定日期** — 选择其他日期的 ideas
 
+---
+
+If **A**: list available dates, load ideas, show selection menu.
+If **B**: read scored items from `history/*/today/json/`, generate ideas yourself, save them.
+If **C**: ask user for date, then proceed like A.
+
+## Phase 1: Find ideas
+
+Try `$IDEAS_DIR/{date}/ideas.json`.
+
+If not found, check `$HISTORY_DIR/*/date/json/` for scored items. If found, generate 3-5 ideas yourself (read items + researcher profile). Save:
 ```bash
 cd $PROJECT_DIR
 echo '$IDEAS_JSON' | python agent_bridge.py save-ideas --date {date}
 ```
 
-If neither ideas nor scored items exist, tell the user and list available dates:
+If nothing exists, show available dates:
 ```bash
-ls $IDEAS_DIR/
+ls $IDEAS_DIR/ 2>/dev/null
+ls $HISTORY_DIR/arxiv/ 2>/dev/null
 ```
 
-### Step 2: Display ideas
+## Phase 2: Display ideas
 
 Show a numbered table:
 
 ```
-| #  | Title          | Score | Area       | Project         | Direction (EN)                    |
-|----|----------------|-------|------------|-----------------|-----------------------------------|
-| 1  | 中文标题        | 8.5   | Safety     | AgentDoG        | One-line English direction...     |
-| 2  | ...            | ...   | ...        | ...             | ...                               |
+| #  | 标题           | 分数  | 方向       | 关联项目        | Research Direction (EN)          |
+|----|---------------|------|-----------|----------------|----------------------------------|
+| 1  | 中文标题        | 8.5  | Safety    | AgentDoG       | One-line English direction...    |
+| 2  | ...           | ...  | ...       | ...            | ...                              |
 ```
 
-### Step 3: Select
+## Phase 3: Select idea
 
-If `--idea N` was given, use it. Otherwise ask the user.
-
-### Step 4: Build research direction
-
-From the selected idea, construct:
-
+Ask user:
 ```
-DIRECTION = "{research_direction}. Hypothesis: {hypothesis_en}. Inspired by: {title1} ({url1}), {title2} ({url2})"
+选择一个 idea 编号（或输入 all 查看详情）:
 ```
 
-Show the direction and ask for confirmation.
+Show selected idea's full details: hypothesis, min_experiment, inspired_by sources.
 
-### Step 5: Choose pipeline
+## Phase 4: Choose pipeline
 
-Ask the user:
+```
+🔬 选择研究管线：
 
-1. **Quick** → `/idea-creator "$DIRECTION"` — Brainstorm and rank
-2. **Full** → `/idea-discovery "$DIRECTION"` — Survey → brainstorm → novelty check → review
-3. **End-to-end** → `/research-pipeline "$DIRECTION"` — All the way to paper
+  1. Quick — /idea-creator
+     → 快速头脑风暴 + 排序（~10min）
 
-Default: Full (`/idea-discovery`).
+  2. Full — /idea-discovery
+     → 文献调研 → 头脑风暴 → 新颖性检验 → 评审（~30min）
 
-### Step 6: Launch
+  3. End-to-end — /research-pipeline
+     → 从 idea 到实验到论文，全自动（~2h+）
 
-Invoke the chosen skill with the constructed direction string.
+默认: 2 (Full)
+```
+
+## Phase 5: Confirm and launch
+
+Show confirmation:
+```
+✅ 即将启动：
+  Idea: {title}
+  Direction: {research_direction}
+  Pipeline: /idea-discovery
+
+  开始？[Y/n]
+```
+
+Build direction string:
+```
+DIRECTION = "{research_direction}. Hypothesis: {hypothesis_en}. Inspired by: {sources with URLs}"
+```
+
+Invoke the chosen skill with `DIRECTION`.
