@@ -56,6 +56,8 @@ import type {
   UserProfile,
 } from "./types";
 import iconArxiv from "./assets/icon_arxiv.svg";
+import iconPubMed from "./assets/icon_pubmed.svg";
+import iconSS from "./assets/icon_ss.svg";
 import avatar0 from "./assets/avatar/0.svg";
 import avatar1 from "./assets/avatar/1.svg";
 import avatar2 from "./assets/avatar/2.svg";
@@ -75,7 +77,7 @@ type ViewName = "home" | "library" | "swipe";
 type RunState = "idle" | "running" | "done" | "error";
 type ControlPanel = "none" | "settings";
 type SettingsTab = "profile" | "preferences" | "subscriptions" | "mail" | "info";
-type ComingSoonSourceKey = "wos" | "cnki" | "wechat" | "scholar";
+type ComingSoonSourceKey = "wechat" | "scholar";
 type StatusState =
   | { kind: "connecting" }
   | { kind: "waitingDesktop" }
@@ -133,9 +135,11 @@ const SOURCES = [
   { key: "huggingface", label: "HuggingFace", description: "论文与模型动态", iconLight: iconHF, iconDark: iconHF, iconActive: iconHF },
   { key: "twitter", label: "X", description: "账号时间线和圈层信号", iconLight: iconXBlack, iconDark: iconX, iconActive: iconX },
   { key: "arxiv", label: "arXiv", description: "新论文抓取与筛选", iconLight: iconArxiv, iconDark: iconArxiv, iconActive: iconArxiv },
+  { key: "pubmed", label: "PubMed", description: "生物医学文献", iconLight: iconPubMed, iconDark: iconPubMed, iconActive: iconPubMed },
+  { key: "semanticscholar", label: "Semantic Scholar", description: "跨学科 2 亿+ 论文", iconLight: iconSS, iconDark: iconSS, iconActive: iconSS },
 ] satisfies Array<{ key: SourceName; label: string; description: string; iconLight: string; iconDark: string; iconActive: string }>;
 
-const COMING_SOON_SOURCE_KEYS = ["wos", "cnki", "wechat", "scholar"] as const satisfies ReadonlyArray<ComingSoonSourceKey>;
+const COMING_SOON_SOURCE_KEYS = ["wechat", "scholar"] as const satisfies ReadonlyArray<ComingSoonSourceKey>;
 
 function parseInterestSummary(value: string) {
   const raw = value.trim();
